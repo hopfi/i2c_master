@@ -1,0 +1,74 @@
+{
+    "projectConfig": {
+        "general": {
+            "projectName": "i2c_master",
+            "swProjectName": "i2c_master_sim",
+            "vendor": "xilinx",
+            "topLevelName": "i2c_master",
+            "testbenchName": "i2c_master_tb",
+            "outputFilesName": "",
+            "autogenerateBitstream": false,
+            "vhdlStandard": "2008",
+            "svStandard": "",
+            "runImpl": false
+        },
+        "xilinx": {
+            "vivadoVersion": "2020.2",
+            "fpgaPart": "xc7a100tcsg324-2",
+            "implStrat": "",
+            "IPIntegrator": {
+                "blockDesignFiles": {
+                    "designs": [
+                    ]
+                }
+            },
+            "IPPackager": {
+                "configFile": "",
+                "packageIP": false,
+                "genereateIP": false,
+                "synthCheck": false
+            }
+        },
+        "intel": {
+            "quartusVersion": "",
+            "familyName": "",
+            "deviceName": "",
+            "implStrat": "",
+            "genereateIP": false,
+            "synthCheck": false
+        }
+    },
+    "versionInfo": {
+        "major": 1,
+        "minor": 2,
+        "patch": 3,
+        "userdata": "Test String!1"
+    },
+    "hdl": {
+        "vhdl": [
+            { "path": "vhdl/generic/i2c_master/i2c_master_tb.vhd", "library": "gen" },
+            { "path": "vhdl/generic/i2c_master/i2c_master.vhd", "library": "gen" }
+        ],
+        "systemverilog": [
+        ]
+    },
+    "constraints": {
+        "xilinx": [
+        ]
+    },
+    "ip": {
+        "xilinx": [ 
+        ],
+        "3rdParty": [
+        ]
+    },
+    "misc": {
+        "tcl": [
+        ],
+        "textfiles": [
+        ],
+        "elf": [
+        ]
+
+    }
+}
