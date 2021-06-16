@@ -58,7 +58,7 @@ end i2c_master;
 architecture rtl of i2c_master is
 
     constant C_BIT_PERIOD           : unsigned(15 downto 0) := to_unsigned((G_SYSTEM_CLOCK / G_BAUD_RATE), 16);
-    constant C_ZERO_PERIOD          : unsigned(15 downto 0) := x"0001";
+    constant C_ZERO_PERIOD          : unsigned(15 downto 0) := x"0003";
     constant C_ONE_QUARTER_PERIOD   : unsigned(15 downto 0) := "00" & C_BIT_PERIOD(15 downto 2);
     constant C_HALF_PERIOD          : unsigned(15 downto 0) := '0' & C_BIT_PERIOD(15 downto 1);
     constant C_THREE_QUARTER_PERIOD : unsigned(15 downto 0) := C_HALF_PERIOD + C_ONE_QUARTER_PERIOD;
@@ -170,6 +170,7 @@ begin
                     if scl_in = '0' and scl_r1 = '1' then
                         start_alert <= '0';
                         start_detected <= '1';
+                        stop_detected <= '0';
                     end if;
                 end if;
 
@@ -200,8 +201,11 @@ begin
             if i_sys_rst = '1' then
                 i2c_state   <= init;
                 cnt_en      <= '0';
-                sda_tri    <= '1';
-                scl_tri    <= '1';
+                halt_cnt    <= '0';
+                sda_tri     <= '1';
+                sda_out     <= '1';
+                scl_tri     <= '1';
+                scl_out     <= '1';
                 ack_error   <= '0';
                 sending     <= '0';
                 receiving   <= '0';
@@ -212,8 +216,13 @@ begin
                 case i2c_state is
                     when init =>
                         cnt_en      <= '0';
+                        halt_cnt    <= '0';
                         sda_tri     <= '1';
                         scl_tri     <= '1';
+                        sda_tri     <= '1';
+                        sda_out     <= '1';
+                        scl_tri     <= '1';
+                        scl_out     <= '1';
                         ack_error   <= '0';
                         sending     <= '0';
                         receiving   <= '0';
@@ -228,30 +237,34 @@ begin
                             bit_cnt       <= x"7";
                             
                             cnt_en    <= '1';
+                            scl_tri   <= '0';
+                            sda_tri   <= '0';
                             i2c_state <= start_cond;
                         end if;
 
                     when start_cond =>
                         if cnt_one_pulse = '1' then
-                            sda_tri <= '0';
+                            sda_out <= '0';
                         end if;
 
                         if cnt_two_pulse = '1' then
-                            scl_tri <= '0';
+                            scl_out <= '0';
                         end if;
 
                         if cnt_four_pulse = '1' then
                             first_byte <= '1';
-                            i2c_state <= get_send_data;
+                            halt_cnt   <= '1';
+                            i2c_state  <= get_send_data;
 
                             if en_r1 = '0' then
+                                halt_cnt <= '0';
                                 i2c_state <= stop_cond;
                             end if;
                         end if;
 
                     when get_ack =>
                         if cnt_one_pulse = '1' then
-                            scl_tri <= '1';
+                            scl_out <= '1';
                         end if;
 
                         if cnt_two_pulse = '1' then
@@ -263,68 +276,78 @@ begin
                         end if;
                         
                         if cnt_three_pulse = '1' then
-                            scl_tri <= '0';
+                            scl_out <= '0';
                         end if;
 
                         if cnt_four_pulse = '1' then
+                            sending   <= '0';
                             if ack_nack = '0' then
                                 if rw_mode = '1' then
                                     receiving <= '1';
                                     i2c_state <= receive_data;
                                 else
-                                    sending <= '0';
-                                    halt_cnt <= '1';
+                                    halt_cnt  <= '1';
+                                    sda_tri   <= '0';
+                                    sda_out   <= '0';
                                     i2c_state <= get_send_data;
                                 end if;
                                 bit_cnt <= x"7";
                             else
                                 ack_error <= '1';
+                                sda_tri   <= '0';
+                                sda_out   <= '1';
                                 i2c_state <= stop_cond;
                             end if;
 
                             if en_r1 = '0' then
+                                sda_tri   <= '0';
+                                sda_out   <= '0';
                                 i2c_state <= stop_cond;
                             end if;
                         end if;
 
                     when get_send_data =>
-                        
                         if i_wr_en = '1' then
                             wr_data_reg <= i_wr_data;
                             if first_byte = '1' then
                                 first_byte <= '0';
-                                rw_mode     <= i_wr_data(0);
+                                rw_mode    <= i_wr_data(0);
                             end if;
                             sending     <= '1';
                             halt_cnt    <= '0';
+                            bit_cnt     <= x"7";
                             i2c_state   <= send_data;
                         end if;
 
                         if en_r1 = '0' then
-                            if stop_mode_reg = x"00" then
+                            halt_cnt  <= '0';
+
+                            if stop_mode_reg = "00" then
                                 i2c_state <= stop_cond;
-                            elsif stop_mode_reg = x"01" then
+                            elsif stop_mode_reg = "01" then
                                 i2c_state <= repstart_cond;
+                            else 
+                                i2c_state <= stop_cond;
                             end if;
                         end if;
                     
                     when send_data =>
-
                         if cnt_zero_pulse = '1' then
-                            sda_tri <= wr_data_reg(to_integer(bit_cnt));
+                            sda_out <= wr_data_reg(to_integer(bit_cnt));
                         end if;
 
                         if cnt_one_pulse = '1' then
-                            scl_tri <= '1';
+                            scl_out <= '1';
                         end if;
 
                         if cnt_three_pulse = '1' then
-                            scl_tri <= '0';
+                            scl_out <= '0';
                         end if;
 
                         if cnt_four_pulse = '1' then
                             bit_cnt <= bit_cnt - 1;
                             if bit_cnt = x"0" then
+                                sda_tri   <= '1';
                                 i2c_state <= get_ack;
                             end if;
 
@@ -334,9 +357,8 @@ begin
                         end if;
 
                     when receive_data =>
-
                         if cnt_one_pulse = '1' then
-                            scl_tri <= '1';
+                            scl_out <= '1';
                         end if;
 
                         if cnt_two_pulse = '1' then
@@ -344,17 +366,20 @@ begin
                         end if;
 
                         if cnt_three_pulse = '1' then
-                            scl_tri <= '0';
+                            scl_out <= '0';
                         end if;
 
                         if cnt_four_pulse = '1' then
                             bit_cnt <= bit_cnt - 1;
                             if bit_cnt = x"0" then
                                 halt_cnt <= '1';
+                                receiving <= '0';
                                 i2c_state <= get_receive_data;
                             end if;
 
                             if en_r1 = '0' then
+                                sda_tri   <= '0';
+                                sda_out   <= '0';
                                 i2c_state <= stop_cond;
                             end if;
                         end if;
@@ -362,45 +387,45 @@ begin
                     when get_receive_data =>
                         if i_rd_en = '1' then
                             receive_done <= '0';
-                            halt_cnt <= '0';
-                            i2c_state <= send_ack;
+                            halt_cnt     <= '0';
+                            sda_tri      <= '0';
+                            sda_out      <= '0';
+                            i2c_state    <= send_ack;
                         end if;
 
                         if en_r1 = '0' then
                             receive_done <= '1';
-                            halt_cnt <= '0';
-                            i2c_state <= send_ack;
+                            halt_cnt     <= '0';
+                            sda_tri      <= '0';
+                            sda_out      <= '1';
+                            i2c_state    <= send_ack;
                         end if;
 
                     when send_ack =>
-                        if cnt_zero_pulse = '1' then
-                            if receive_done = '1' then
-                                sda_tri <= '1';
-                            else
-                                sda_tri <= '0';
-                            end if;
-                        end if;
-
                         if cnt_one_pulse = '1' then
-                            scl_tri <= '1';
+                            scl_out <= '1';
                         end if;
 
                         if cnt_three_pulse = '1' then
-                            scl_tri <= '0';
+                            scl_out <= '0';
                         end if;
 
                         if cnt_four_pulse = '1' then
-                            receiving <= '0';
 
                             if receive_done = '1' then
-                                if i_stop_mode = x"00" then
+                                if stop_mode_reg = "00" then
                                     i2c_state <= stop_cond;
-                                elsif i_stop_mode = x"01" then
+                                elsif stop_mode_reg = "01" then
                                     i2c_state <= repstart_cond;
+                                else
+                                    i2c_state <= stop_cond;
                                 end if;
                             else
-                                halt_cnt <= '1';
-                                i2c_state <= get_receive_data;
+                                sda_tri   <= '1';
+                                sda_out   <= '1';
+                                receiving <= '1';
+                                bit_cnt   <= x"7";
+                                i2c_state <= receive_data;
                             end if;
 
                             if en_r1 = '0' then
@@ -410,36 +435,37 @@ begin
                     
                     when stop_cond =>
                         if cnt_zero_pulse = '1' then
-                            sda_tri <= '0';
+                            sda_out <= '0';
                         end if;
 
                         if cnt_two_pulse = '1' then
-                            scl_tri <= '1';
+                            scl_out <= '1';
                         end if;
 
                         if cnt_three_pulse = '1' then
-                            sda_tri <= '1';
+                            sda_out <= '1';
                         end if;
 
                         if cnt_four_pulse = '1' then
+                            scl_tri   <= '1';
+                            sda_tri   <= '1';
+                            cnt_en    <= '0';
                             i2c_state <= idle;
                         end if;
 
                     when repstart_cond =>
                         if cnt_zero_pulse = '1' then
-                            sda_tri <= '1';
+                            sda_out <= '1';
                         end if;
 
                         if cnt_two_pulse = '1' then
-                            scl_tri <= '1';
-                        end if;
-
-                        if cnt_three_pulse = '1' then
-                            sda_tri <= '0';
+                            scl_out <= '1';
                         end if;
 
                         if cnt_four_pulse = '1' then
-                            i2c_state <= start_cond;
+                            ack_error     <= '0';
+                            stop_mode_reg <= i_stop_mode;
+                            i2c_state     <= start_cond;
                         end if;
 
                     when others =>
@@ -477,23 +503,23 @@ begin
                 if cnt_en_r1 = '1' and halt_cnt <= '0' then
                     cnt <= cnt + 1;
 
-                    if cnt = C_ZERO_PERIOD then
+                    if cnt = C_ZERO_PERIOD - 1 then
                         cnt_zero_pulse <= '1';
                     end if; 
 
-                    if cnt = C_ONE_QUARTER_PERIOD then
+                    if cnt = C_ONE_QUARTER_PERIOD - 1 then
                         cnt_one_pulse <= '1';
                     end if; 
 
-                    if cnt = C_HALF_PERIOD then
+                    if cnt = C_HALF_PERIOD - 1 then
                         cnt_two_pulse <= '1';
                     end if; 
 
-                    if cnt = C_THREE_QUARTER_PERIOD then
+                    if cnt = C_THREE_QUARTER_PERIOD - 1 then
                         cnt_three_pulse <= '1';
                     end if; 
 
-                    if cnt = C_BIT_PERIOD then
+                    if cnt = C_BIT_PERIOD - 1 then
                         cnt_four_pulse <= '1';
                         cnt <= (others => '0');
                     end if;
