@@ -5,7 +5,7 @@
             "swProjectName": "i2c_master_sim",
             "vendor": "xilinx",
             "topLevelName": "i2c_master",
-            "testbenchName": "i2c_master_tb",
+            "testbenchName": "standard_read_tb",
             "outputFilesName": "",
             "autogenerateBitstream": false,
             "vhdlStandard": "2008",
@@ -46,7 +46,8 @@
     },
     "hdl": {
         "vhdl": [
-            { "path": "vhdl/generic/i2c_master/i2c_master_tb.vhd", "library": "gen" },
+            { "path": "vhdl/generic/i2c_master/standard_write_tb.vhd", "library": "gen" },
+            { "path": "vhdl/generic/i2c_master/standard_read_tb.vhd", "library": "gen" },
             { "path": "vhdl/generic/i2c_master/i2c_master.vhd", "library": "gen" }
         ],
         "systemverilog": [
