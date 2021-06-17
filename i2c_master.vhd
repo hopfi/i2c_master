@@ -4,6 +4,8 @@
 -- Module: i2c_master
 -- Description:
 -- I2C Master module to initiate I2C transmissions.
+-- Supports bus arbitration. Repeated start is possible.
+-- Clock stretching by slave is not (yet) implemented.
 --
 -- History:
 -- Version  | Date       | Information
@@ -88,6 +90,13 @@ architecture rtl of i2c_master is
     signal scl_tri     : std_logic;         --! Tristate signal for SCL line.
     signal sda_tri     : std_logic;         --! Tristate signal for SDA line.
 
+    signal scl_in_r1   : std_logic;         --! Sync signals for I2C lines.
+    signal scl_in_r2   : std_logic;         --! Sync signals for I2C lines.
+    signal scl_in_r3   : std_logic;         --! Sync signals for I2C lines.
+    signal sda_in_r1   : std_logic;         --! Sync signals for I2C lines.
+    signal sda_in_r2   : std_logic;         --! Sync signals for I2C lines.
+    signal sda_in_r3   : std_logic;         --! Sync signals for I2C lines.
+
     signal sda_r1      : std_logic;        --! Register for SDA line. Used for bus arbitration.
     signal scl_r1      : std_logic;        --! Register for SCL line. Used for bus arbitration.
 
@@ -155,19 +164,19 @@ begin
                 stop_detected   <= '1';
 
             else
-                sda_r1 <= sda_in;
-                scl_r1 <= scl_in;
+                sda_r1 <= sda_in_r3;
+                scl_r1 <= scl_in_r3;
 
                 if stop_detected = '1' then
-                    if sda_in = '0' and sda_r1 = '1' then
+                    if sda_in_r3 = '0' and sda_r1 = '1' then
                         start_alert <= '1';
-                    elsif sda_in = '1' and sda_r1 = '0' then
+                    elsif sda_in_r3 = '1' and sda_r1 = '0' then
                         start_alert <= '0';
                     end if;
                 end if;
 
                 if start_alert = '1' then
-                    if scl_in = '0' and scl_r1 = '1' then
+                    if scl_in_r3 = '0' and scl_r1 = '1' then
                         start_alert <= '0';
                         start_detected <= '1';
                         stop_detected <= '0';
@@ -175,15 +184,15 @@ begin
                 end if;
 
                 if start_detected = '1' then
-                    if scl_in = '1' and scl_r1 = '0' then
+                    if scl_in_r3 = '1' and scl_r1 = '0' then
                         stop_alert <= '1';
-                    elsif scl_in = '0' and scl_r1 = '1' then
+                    elsif scl_in_r3 = '0' and scl_r1 = '1' then
                         stop_alert <= '0';
                     end if;
                 end if;
 
                 if stop_alert = '1' then
-                    if sda_in = '1' and sda_r1 = '0' then
+                    if sda_in_r3 = '1' and sda_r1 = '0' then
                         stop_alert <= '0';
                         start_detected <= '0';
                         stop_detected <= '1';
@@ -193,6 +202,29 @@ begin
             end if;
         end if;
     end process bus_arb_proc;
+
+    --! Synchronisation of I2C Lines
+    sync_proc : process (i_sys_clk)
+    begin
+        if rising_edge(i_sys_clk) then
+            if i_sys_rst = '1' then
+                scl_in_r1 <= '1';
+                scl_in_r2 <= '1';
+                scl_in_r3 <= '1';
+                sda_in_r1 <= '1';
+                sda_in_r2 <= '1';
+                sda_in_r3 <= '1';
+            else
+                scl_in_r1 <= scl_in;
+                scl_in_r2 <= scl_in_r1;
+                scl_in_r3 <= scl_in_r2;
+
+                sda_in_r1 <= sda_in;
+                sda_in_r2 <= sda_in_r1;
+                sda_in_r3 <= sda_in_r2;
+            end if;
+        end if;
+    end process;
 
     --! Actuall FSM für I2C bus handling.
     i2c_proc : process (i_sys_clk)
@@ -268,7 +300,7 @@ begin
                         end if;
 
                         if cnt_two_pulse = '1' then
-                            if sda_in = '0' then
+                            if sda_in_r3 = '0' then
                                 ack_nack <= '0';
                             else
                                 ack_nack <= '1';
@@ -362,7 +394,7 @@ begin
                         end if;
 
                         if cnt_two_pulse = '1' then
-                            rd_data_reg(to_integer(bit_cnt)) <= sda_in;
+                            rd_data_reg(to_integer(bit_cnt)) <= sda_in_r3;
                         end if;
 
                         if cnt_three_pulse = '1' then
