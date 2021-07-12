@@ -482,6 +482,8 @@ begin
                             scl_tri   <= '1';
                             sda_tri   <= '1';
                             cnt_en    <= '0';
+                            sending   <= '0';
+                            receiving <= '0';
                             i2c_state <= idle;
                         end if;
 
